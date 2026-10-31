@@ -14,6 +14,8 @@
 #include <conio.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include "u1mbinfo_check.h"
 
 #define TABLE_ADDRESS 0xD174u
 #define DISKS         15u
@@ -40,6 +42,7 @@ static const step_t steps[] = {
 
 static uint8_t buffer[8];
 static uint8_t table[DISKS + 1 + DEVICES * 2];
+static uint8_t before_probe[DISKS + 1 + DEVICES * 2];
 static uint8_t pbi_select;
 
 static void pair(uint8_t a, uint8_t b)
@@ -117,7 +120,7 @@ static void send(const step_t *s)
 
 int main(void)
 {
-  uint8_t i, key, selected, speed, found, cleared_7f;
+  uint8_t i, key, selected, speed;
 
   clrscr();
   puts("U1MBINFO (no FujiNet calls)");
@@ -127,9 +130,6 @@ int main(void)
   do { key = cgetc(); } while ((key < '0' || key > '3') && key != 'a' && key != 'A' && key != 'q' && key != 'Q');
   if (key == 'q' || key == 'Q') return 0;
   selected = (key == 'a' || key == 'A') ? DEVICES : key - '0';
-  cleared_7f = 0;
-  for (i = 0; i < DEVICES; ++i)
-    if ((selected == DEVICES || selected == i) && table[16 + i] == 0x7f) cleared_7f = 1;
   if (!clear_entries(selected)) {
     puts("Clear readback FAILED; stopping.");
     dump_tables();
@@ -137,21 +137,18 @@ int main(void)
   }
   puts("Clear readback OK");
   dump_tables();
-  puts("Set sio.hsio 0-9 on FujiNet console.");
-  puts("Enter the same index here (0-9):");
-  do { key = cgetc(); } while (key < '0' || key > '9');
-  speed = key - '0';
-  puts("Press key after console setting.");
-  cgetc();
+  puts("Set sio.hsio 0-9 or off on console.");
+  puts("Then enter index 0-9, or O for off:");
+  do { key = cgetc(); } while ((key < '0' || key > '9') && key != 'o' && key != 'O');
+  speed = (key == 'o' || key == 'O') ? 0xff : key - '0';
+  if (!dump_tables()) return 1;
+  memcpy(before_probe, table, sizeof(table));
   puts("Send 7F Q; then check device table.");
   send(&steps[0]);
   printf("SIO status $%02x\n", (unsigned)OS.dcb.dstats);
   dump_tables();
-  found = 0;
-  for (i = 0; i < DEVICES; ++i) {
-    if ((selected == DEVICES || selected == i) && table[16 + i] == 0x7f && table[20 + i] == speed + 1) found = 1;
-  }
-  if (OS.dcb.dstats == 1 && found && cleared_7f) puts("7F entry matches requested speed.");
+  if (speed == 0xff) puts("Off: inspect 7F entry and sio.status.");
+  else if (OS.dcb.dstats == 1 && u1mb_new_entry(before_probe, table, speed)) puts("New 7F entry matches speed.");
   else puts("7F entry not verified; see table.");
   puts("Key for original SIO diagnostics.");
   cgetc();
