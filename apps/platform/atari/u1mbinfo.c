@@ -6,7 +6,8 @@
  * Run `sio.status` on the FujiNet afterwards for what reached it.
  *
  * The tables are the U1MB's own (undocumented): the PBI ROM selected by writing its ID bit to $D1FF
- * shows "S3", "IC" or "XU" at $D800; $D174+n is disk n+1's entry (0 = never polled, else the divisor
+ * shows "S3", "IC" or "XU" at $D800 and the standard PBI identification bytes;
+ * $D174+n is disk n+1's entry (0 = never polled, else the divisor
  * plus 1) and $D184..$D187 / $D188..$D18B are up to four non-disk device IDs and their entries.
  */
 
@@ -52,30 +53,17 @@ static void pair(uint8_t a, uint8_t b)
 
 static uint8_t dump_tables(void)
 {
-  uint8_t sigs[16];
-  uint8_t i;
-  uint8_t sel = 0;
-
-  for (i = 0; i < 8 && !sel; ++i) {
-    *(volatile uint8_t *) 0xD1FF = 0x80 >> i;
-    sigs[i * 2] = *(volatile uint8_t *) 0xD800;
-    sigs[i * 2 + 1] = *(volatile uint8_t *) 0xD801;
-    if ((sigs[i * 2] == 'X' && sigs[i * 2 + 1] == 'U') || (sigs[i * 2] == 'I' && sigs[i * 2 + 1] == 'C') ||
-        (sigs[i * 2] == 'S' && sigs[i * 2 + 1] == '3')) {
-      for (sel = 0; sel < sizeof(table); ++sel)
-        table[sel] = *(volatile uint8_t *) (TABLE_ADDRESS + sel);
-      sel = 0x80 >> i;
-    }
-  }
-  *(volatile uint8_t *) 0xD1FF = 0;
-
+  uint8_t i, sel = fn_atari_u1mb_pbi();
+  uint8_t original = *(volatile uint8_t *)0x0248;
   if (!sel) {
-    printf("no ROM; $D800/1 per select:");
-    for (i = 0; i < 8; ++i)
-      pair(sigs[i * 2], sigs[i * 2 + 1]);
-    puts("");
+    puts("No supported PBI BIOS active.");
     return 0;
   }
+  *(volatile uint8_t *)0x0248 = sel;
+  *(volatile uint8_t *)0xD1FF = sel;
+  for (i = 0; i < sizeof(table); ++i) table[i] = *(volatile uint8_t *)(TABLE_ADDRESS + i);
+  *(volatile uint8_t *)0x0248 = original;
+  *(volatile uint8_t *)0xD1FF = original;
   printf("PBI $%02x disk:", (unsigned) sel);
   for (i = 0; i < DISKS; ++i)
     if (table[i])
@@ -109,7 +97,7 @@ int main(void)
   clrscr();
   puts("U1MBINFO");
   puts("start:");
-  if (!dump_tables()) return 1;
+  if (!dump_tables()) { puts("Press a key to exit."); cgetc(); return 1; }
   puts("Clear device slot 0-3, A=all, Q=quit");
   do { key = cgetc(); } while ((key < '0' || key > '3') && key != 'a' && key != 'A' && key != 'q' && key != 'Q');
   if (key == 'q' || key == 'Q') return 0;
@@ -120,18 +108,19 @@ int main(void)
   status = fn_init();
   if (status == FN_OK) status = fn_fuji_set_hsio(speed);
   if (status == FN_OK) status = fn_fuji_get_hsio(&observed);
-  if (status != FN_OK) { printf("Set HSIO failed: %u\n", (unsigned)status); return 1; }
+  if (status != FN_OK) { printf("Set HSIO failed: %u\nPress a key.\n", (unsigned)status); cgetc(); return 1; }
   printf("FujiNet index: $%02x\n", (unsigned)observed);
   status = fn_atari_u1mb_clear_devices(selected == DEVICES ? 15 : (1u << selected));
   if (status == FN_OK) status = fn_atari_u1mb_clear_device(0x7f);
   if (status != FN_OK) {
     printf("Clear failed: %u\n", (unsigned)status);
     dump_tables();
+    puts("Press a key to exit."); cgetc();
     return 1;
   }
   puts("Clear readback OK");
   dump_tables();
-  if (!dump_tables()) return 1;
+  if (!dump_tables()) { puts("Press a key to exit."); cgetc(); return 1; }
   memcpy(before_probe, table, sizeof(table));
   puts("Send 7F Q; then check device table.");
   send(&steps[0]);
