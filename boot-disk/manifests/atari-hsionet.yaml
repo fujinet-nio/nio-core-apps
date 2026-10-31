@@ -1,0 +1,4 @@
+# Standalone TCP stress test; build without replacing the normal boot disk.
+apps:
+  - src: ${BOOT_DISK_BIN}/hsionet.xex
+    name: autorun.xex
