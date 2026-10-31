@@ -1,6 +1,6 @@
 /* U1MBINFO: examine and clear U1MB HSIO device cache entries.
  *
- * No FujiNet library calls and no other traffic: the program shows the U1MB's HSIO tables, then
+ * Sets the FujiNet HSIO index, clears selected U1MB entries, then
  * sends one raw SIO command at a time through the OS (so through the U1MB's handler) and shows the
  * tables again after each, so the command that first creates an entry for a device is visible.
  * Run `sio.status` on the FujiNet afterwards for what reached it.
@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "fujinet-nio.h"
 #include "u1mbinfo_check.h"
 
 #define TABLE_ADDRESS 0xD174u
@@ -43,7 +44,6 @@ static const step_t steps[] = {
 static uint8_t buffer[8];
 static uint8_t table[DISKS + 1 + DEVICES * 2];
 static uint8_t before_probe[DISKS + 1 + DEVICES * 2];
-static uint8_t pbi_select;
 
 static void pair(uint8_t a, uint8_t b)
 {
@@ -68,7 +68,6 @@ static uint8_t dump_tables(void)
     }
   }
   *(volatile uint8_t *) 0xD1FF = 0;
-  pbi_select = sel;
 
   if (!sel) {
     printf("no ROM; $D800/1 per select:");
@@ -88,21 +87,6 @@ static uint8_t dump_tables(void)
   return 1;
 }
 
-/* Only clear the speed bytes; the device IDs and disk cache are untouched. */
-static uint8_t clear_entries(uint8_t selected)
-{
-  uint8_t i, ok = 1;
-  *(volatile uint8_t *)0xD1FF = pbi_select;
-  for (i = 0; i < DEVICES; ++i) {
-    if (selected == DEVICES || selected == i) {
-      *(volatile uint8_t *)(TABLE_ADDRESS + 20u + i) = 0;
-      if (*(volatile uint8_t *)(TABLE_ADDRESS + 20u + i) != 0) ok = 0;
-    }
-  }
-  *(volatile uint8_t *)0xD1FF = 0;
-  return ok;
-}
-
 static void send(const step_t *s)
 {
   buffer[0] = buffer[1] = buffer[2] = buffer[3] = 0;
@@ -120,27 +104,33 @@ static void send(const step_t *s)
 
 int main(void)
 {
-  uint8_t i, key, selected, speed;
+  uint8_t i, key, selected, speed, status, observed;
 
   clrscr();
-  puts("U1MBINFO (no FujiNet calls)");
+  puts("U1MBINFO");
   puts("start:");
   if (!dump_tables()) return 1;
   puts("Clear device slot 0-3, A=all, Q=quit");
   do { key = cgetc(); } while ((key < '0' || key > '3') && key != 'a' && key != 'A' && key != 'q' && key != 'Q');
   if (key == 'q' || key == 'Q') return 0;
   selected = (key == 'a' || key == 'A') ? DEVICES : key - '0';
-  if (!clear_entries(selected)) {
-    puts("Clear readback FAILED; stopping.");
+  puts("Set HSIO index 0-9, O=off:");
+  do { key = cgetc(); } while ((key < '0' || key > '9') && key != 'o' && key != 'O');
+  speed = (key == 'o' || key == 'O') ? 0xff : key - '0';
+  status = fn_init();
+  if (status == FN_OK) status = fn_fuji_set_hsio(speed);
+  if (status == FN_OK) status = fn_fuji_get_hsio(&observed);
+  if (status != FN_OK) { printf("Set HSIO failed: %u\n", (unsigned)status); return 1; }
+  printf("FujiNet index: $%02x\n", (unsigned)observed);
+  status = fn_atari_u1mb_clear_devices(selected == DEVICES ? 15 : (1u << selected));
+  if (status == FN_OK) status = fn_atari_u1mb_clear_device(0x7f);
+  if (status != FN_OK) {
+    printf("Clear failed: %u\n", (unsigned)status);
     dump_tables();
     return 1;
   }
   puts("Clear readback OK");
   dump_tables();
-  puts("Set sio.hsio 0-9 or off on console.");
-  puts("Then enter index 0-9, or O for off:");
-  do { key = cgetc(); } while ((key < '0' || key > '9') && key != 'o' && key != 'O');
-  speed = (key == 'o' || key == 'O') ? 0xff : key - '0';
   if (!dump_tables()) return 1;
   memcpy(before_probe, table, sizeof(table));
   puts("Send 7F Q; then check device table.");
