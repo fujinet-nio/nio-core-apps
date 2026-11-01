@@ -8,9 +8,17 @@ AMIGA_CRT_wb13 := nix13
 AMIGA_CRT_wb31 := clib2
 AMIGA_CRT_wb32 := clib2
 
-.PHONY: all all-targets clean disk disk-all boot-disk boot-disk-all install-boot-disk $(TARGETS)
+.PHONY: all all-targets clean disk disk-all boot-disk boot-disk-all install-boot-disk test-hsioflip $(TARGETS)
 
+HOSTCC ?= cc
+FUJINET_NIO_LIB ?= ../fujinet-nio-lib
 all: $(DEFAULT_TARGET)
+
+test-hsioflip:
+	mkdir -p build/tests
+	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -DHSIOFLIP_TEST -D__fastcall__= \
+	    -I$(FUJINET_NIO_LIB)/include apps/platform/atari/hsioflip.c tests/hsioflip_test.c -o build/tests/hsioflip-test
+	build/tests/hsioflip-test
 
 msdos atari linux:
 	$(MAKE) -f makefiles/build.mk TARGET=$@

@@ -1,0 +1,4 @@
+# Standalone U1MB HSIO transition experiment; does not replace the config disk.
+apps:
+  - src: ${BOOT_DISK_BIN}/hsioflip.xex
+    name: autorun.xex

@@ -29,6 +29,7 @@ The Atari boot disk starts the FujiNet NIO config application (`repos/nio-config
 staged as `autorun.xex`: PicoBoot runs the first directory entry and `dir2atr` sorts by name (see
 `boot-disk/manifests/atari.yaml`). `boot-disk/manifests/atari-ftestnio.yaml` builds the old
 hardware bring-up disk that starts `ftestnio`.
+For the U1MB HSIO 0-to-off hardware experiment, see [hsioflip](tools/atari-hsio/hsioflip.md).
 
 Boot disks are repo-owned:
 
