@@ -13,12 +13,16 @@ FUJINET_NIO_ESP32_BOOT_DIR ?= $(FUJINET_NIO)/distfiles/esp32-data/boot/$(BOOT_DI
 
 BOOT_ATARI_IMAGE ?= $(BOOT_DISK_OUTPUT_DIR)/autorun.atr
 BOOT_BBC_IMAGE ?= $(BOOT_DISK_OUTPUT_DIR)/FN-BOOT.ssd
+BOOT_C64_IMAGE ?= $(BOOT_DISK_OUTPUT_DIR)/autorun.d64
+BOOT_C64_TITLE ?= FUJINET NIO
+BOOT_C64_FILES ?= CONFIG.prg
 BOOT_MSDOS_IMAGE ?= $(BOOT_DISK_OUTPUT_DIR)/autorun.img
 BOOT_MSDOS_LABEL ?= FNBOOT
 BOOT_MSDOS_PRESET ?= 1440
 
 BOOT_DISK_IMAGE_atari := $(BOOT_ATARI_IMAGE)
 BOOT_DISK_IMAGE_bbc := $(BOOT_BBC_IMAGE)
+BOOT_DISK_IMAGE_c64 := $(BOOT_C64_IMAGE)
 BOOT_DISK_IMAGE_msdos := $(BOOT_MSDOS_IMAGE)
 BOOT_DISK_IMAGE := $(BOOT_DISK_IMAGE_$(PLATFORM))
 
@@ -44,6 +48,13 @@ boot-disk-bbc: all | $(BOOT_DISK_OUTPUT_DIR)
 	$(stage_boot_files)
 	python3 "$(CREATE_SSD)" -i "$(BOOT_DISK_STAGE_DIR)" -o "$(BOOT_BBC_IMAGE)" -t FNBOOT
 	@echo "Created BBC boot disk: $(BOOT_BBC_IMAGE)"
+
+# The C64 disk holds only the config app, built in repos/nio-config: LOAD"*",8,1
+# finds the first file in its directory, so the order of BOOT_C64_FILES matters.
+boot-disk-c64: | $(BOOT_DISK_OUTPUT_DIR)
+	$(stage_boot_files)
+	python3 boot-disk/scripts/create_d64.py -i "$(BOOT_DISK_STAGE_DIR)" -o "$(BOOT_C64_IMAGE)" -t "$(BOOT_C64_TITLE)" --files $(BOOT_C64_FILES)
+	@echo "Created C64 boot disk: $(BOOT_C64_IMAGE)"
 
 boot-disk-msdos: all | $(BOOT_DISK_OUTPUT_DIR)
 	$(stage_boot_files)

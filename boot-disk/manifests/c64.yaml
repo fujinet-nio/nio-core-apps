@@ -1,0 +1,5 @@
+# The C64 boot disk: the config app, first in the directory so LOAD"*",8,1 finds
+# it. Build it first in repos/nio-config: make c64.
+apps:
+  - src: ${NIO_CONFIG}/build/c64/bin/config-nio.prg
+    name: CONFIG.prg
