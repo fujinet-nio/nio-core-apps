@@ -426,8 +426,12 @@ int main(int argc, char **argv)
     } else {
       entry = FindDosEntry(list, (CONST_STRPTR)name, LDF_DEVICES);
       if (!entry) {
-        fprintf(stderr, "Cannot find DosList entry for DN%d:\n", unit);
-        rc = 10;
+        /*
+         * No DOS node means nothing in this session had mounted DN<unit>:, for
+         * example a mapping saved before a reboot. The eject above has already
+         * dropped the saved mapping, so there is nothing left to remove.
+         */
+        printf("DN%d: no DOS entry to remove\n", unit);
       } else {
         RemDosEntry(entry);
       }
