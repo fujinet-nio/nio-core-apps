@@ -38,6 +38,8 @@ PROGRAMS_ALL := $(sort $(basename $(notdir $(APP_SRCS))))
 PROGRAMS_EXCLUDE_msdos :=
 PROGRAMS_EXCLUDE_atari := fboot
 PROGRAMS_EXCLUDE_linux :=
+# The utilities are not built for the C64 yet.
+PROGRAMS_EXCLUDE_c64 := $(PROGRAMS_ALL)
 PROGRAMS_EXCLUDE := $(PROGRAMS_EXCLUDE_$(TARGET))
 ifeq ($(AMIGA_WB13),1)
 # SystemTags()/SYS_Asynch used by fmountrestore is a Kickstart 2.0 API.
