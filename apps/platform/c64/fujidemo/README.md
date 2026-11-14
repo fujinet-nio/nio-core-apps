@@ -18,8 +18,7 @@ Andrew Diller wrote it for [PocketFujiC64](https://github.com/dillera/pocketFuji
 it builds as `PFDEMO.PRG` and reads the clock from the classic FujiNet firmware. This is that
 source, carried over: `src/fujidemo.s` is PocketFujiC64's `demo/src/pfdemo.s`, changed to read
 the clock over NIO's packet channel, so it needs NIO to show the time, and to describe NIO in
-its text. The player, the generators and the art are the same. It runs on PAL and NTSC
-machines.
+its text. The player and the generators are the same. It runs on PAL and NTSC machines.
 
 ## Building
 
@@ -35,6 +34,7 @@ from `fujinet-nio-lib`. `make test-c64` runs the generators' tests with the boot
 | `tools/gen_gfx.py` | Art to logo characters, sprites, motion and colour tables |
 | `tools/gen_music.py` | The tune, written as Python data, to player tables |
 | `tools/test_generators.py` | What the generators write fits the demo and the player |
+| `tools/render_art.py` | Draws `art/*.txt` (see below); not part of the build |
 | `art/*.txt` | The logo, letters and icons as editable ASCII art |
 
 ## Notes
@@ -48,6 +48,18 @@ from `fujinet-nio-lib`. `make test-c64` runs the generators' tests with the boot
 - Copying the sprite registers takes about 7 raster lines, so the top interrupt fires at line
   2 and the bar loop waits for line 15 or later.
 - ca65's `.charmap` maps character constants too: write `$41 + I`, not `'A' + I`.
+
+## The art
+
+`art/*.txt` is what the build reads, and can be edited by hand. `tools/render_art.py` draws
+it: the logo and the letter sprites from the [Figtree](https://github.com/erikdkennedy/figtree)
+font (Black Italic and Black), and the icons from plain shapes. It needs Pillow, and downloads
+the two font files, pinned to a commit and checked by SHA-256, into `build/fonts`:
+
+    python3 apps/platform/c64/fujidemo/tools/render_art.py --preview build/art.png
+
+Figtree is under the SIL Open Font License 1.1, which leaves what is drawn with it free of
+the font's licence, so the art is covered by this repository's like the rest of the demo.
 
 ## Copyright and licence
 
