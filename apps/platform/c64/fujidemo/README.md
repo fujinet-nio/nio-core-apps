@@ -12,16 +12,20 @@ type `LOAD"FUJIDEMO",8` and `RUN`. It runs in a loop:
 - A smooth scroller between two rainbow lines.
 - Live date and time from FujiNet. It shows "NO FUJINET FOUND" and keeps running when no
   FujiNet answers.
-- "Pocket Packets", an original three-voice SID tune of about 60 seconds, looping.
+- "Pocket Packets", a three-voice SID tune of about 60 seconds by Andrew Diller, looping.
 
-It comes from `PFDEMO.PRG` in the PocketFujiC64 project, which reads the clock from the
-classic FujiNet firmware. This copy reads it over NIO's packet channel instead, so it needs
-NIO to show the time. It runs on PAL and NTSC machines.
+Andrew Diller wrote it for [PocketFujiC64](https://github.com/dillera/pocketFujiC64), where
+it builds as `PFDEMO.PRG` and reads the clock from the classic FujiNet firmware. This is that
+source, carried over: `src/fujidemo.s` is PocketFujiC64's `demo/src/pfdemo.s`, changed to read
+the clock over NIO's packet channel, so it needs NIO to show the time, and to describe NIO in
+its text. The player, the generators and the art are the same. It runs on PAL and NTSC
+machines.
 
 ## Building
 
-`make TARGET=c64 boot-disk` builds it into `build/c64/bin/fujidemo.prg` and puts it on the
-disk. It needs Python and cc65's `ca65` and `ld65`, and nothing from `fujinet-nio-lib`.
+`make TARGET=c64` builds it into `build/c64/bin/fujidemo.prg`, and `make TARGET=c64
+boot-disk` also puts it on the disk. It needs Python and cc65's `ca65` and `ld65`, and nothing
+from `fujinet-nio-lib`. `make test-c64` runs the generators' tests with the boot disk's.
 
 | File | What |
 |---|---|
@@ -30,6 +34,7 @@ disk. It needs Python and cc65's `ca65` and `ld65`, and nothing from `fujinet-ni
 | `src/c64.cfg` | ld65 layout: PRG `$0801-$37ff`, variables at `$c000` |
 | `tools/gen_gfx.py` | Art to logo characters, sprites, motion and colour tables |
 | `tools/gen_music.py` | The tune, written as Python data, to player tables |
+| `tools/test_generators.py` | What the generators write fits the demo and the player |
 | `art/*.txt` | The logo, letters and icons as editable ASCII art |
 
 ## Notes
@@ -43,3 +48,8 @@ disk. It needs Python and cc65's `ca65` and `ld65`, and nothing from `fujinet-ni
 - Copying the sprite registers takes about 7 raster lines, so the top interrupt fires at line
   2 and the bar loop waits for line 15 or later.
 - ca65's `.charmap` maps character constants too: write `$41 + I`, not `'A' + I`.
+
+## Copyright and licence
+
+Copyright (C) 2026 Andrew Diller. The demo's code, its generators and the music are
+contributed under this repository's licence, GPL-3.0-or-later, as each source file says.

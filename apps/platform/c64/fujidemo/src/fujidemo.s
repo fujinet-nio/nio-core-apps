@@ -1,3 +1,6 @@
+; Copyright (C) 2026 Andrew Diller
+; SPDX-License-Identifier: GPL-3.0-or-later
+;
 ; fujidemo.s -- FujiNet demo: FujiNet logo, sprites, starfield, border
 ; bars that follow the music, a smooth scroller, and the date and time read
 ; live from FujiNet (IEC device 30). Runs in a loop; works without FujiNet too.

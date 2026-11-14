@@ -20,9 +20,10 @@ test-hsioflip:
 	    -I$(FUJINET_NIO_LIB)/include apps/platform/atari/hsioflip.c tests/hsioflip_test.c -o build/tests/hsioflip-test
 	build/tests/hsioflip-test
 
-# The C64 boot disk's image writer.
+# The C64 boot disk's image writer, and the demo's generators.
 test-c64:
 	python3 -m unittest discover -s boot-disk/scripts -p 'test_create_d64.py'
+	python3 -m unittest discover -s apps/platform/c64/fujidemo/tools -p 'test_*.py'
 
 msdos atari linux:
 	$(MAKE) -f makefiles/build.mk TARGET=$@

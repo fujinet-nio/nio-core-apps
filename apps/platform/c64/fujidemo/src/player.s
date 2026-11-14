@@ -1,3 +1,6 @@
+; Copyright (C) 2026 Andrew Diller
+; SPDX-License-Identifier: GPL-3.0-or-later
+;
 ; player.s -- three-voice SID player for the FujiNet demo.
 ;
 ; Plays the tables gen_music.py writes (music.inc): per-voice order lists of

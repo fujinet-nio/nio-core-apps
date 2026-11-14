@@ -62,6 +62,11 @@ $(FUJIDEMO_PRG): $(wildcard $(FUJIDEMO_DIR)/*/*)
 	ca65 -g -t none -I "$(FUJIDEMO_DIR)/src" -I "$(FUJIDEMO_GEN)" -l "$(FUJIDEMO_GEN)/fujidemo.lst" -o "$(FUJIDEMO_GEN)/fujidemo.o" "$(FUJIDEMO_DIR)/src/fujidemo.s"
 	ld65 -C "$(FUJIDEMO_DIR)/src/c64.cfg" -m "$(FUJIDEMO_GEN)/fujidemo.map" -Ln "$(FUJIDEMO_GEN)/fujidemo.lbl" -o "$@" "$(FUJIDEMO_GEN)/fujidemo.o"
 
+# Until the utilities are, the demo is what make TARGET=c64 builds.
+ifeq ($(PLATFORM),c64)
+all: $(FUJIDEMO_PRG)
+endif
+
 # The C64 disk holds the config app, built in repos/nio-config, and the demo: LOAD"*",8,1
 # finds the first file in its directory, so the order of BOOT_C64_FILES matters.
 boot-disk-c64: $(FUJIDEMO_PRG) | $(BOOT_DISK_OUTPUT_DIR)
