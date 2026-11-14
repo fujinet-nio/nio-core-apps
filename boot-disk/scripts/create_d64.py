@@ -60,6 +60,7 @@ class D64:
         self.data = bytearray(sum(sectors_on_track(t) for t in range(1, TRACKS + 1)) * SECTOR_BYTES)
         self.free = {t: set(range(sectors_on_track(t))) for t in range(1, TRACKS + 1)}
         self.entries = 0
+        self.names: set[bytes] = set()
         self.title = petscii_name(title, 16)
         self.disk_id = petscii_name(disk_id, 2)
         if len(self.disk_id) != 2:
@@ -120,6 +121,10 @@ class D64:
         name_bytes = petscii_name(name, 16)
         if not payload:
             raise ValueError(f"{name!r}: a file needs at least one byte")
+        # The drive finds a file by name, so a second one by the same name could never be loaded.
+        if name_bytes in self.names:
+            raise ValueError(f"{name!r}: a file of that name is already on the disk")
+        self.names.add(name_bytes)
 
         first = None
         previous = None

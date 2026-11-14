@@ -8,7 +8,7 @@ AMIGA_CRT_wb13 := nix13
 AMIGA_CRT_wb31 := clib2
 AMIGA_CRT_wb32 := clib2
 
-.PHONY: all all-targets clean disk disk-all boot-disk boot-disk-all install-boot-disk test-hsioflip $(TARGETS)
+.PHONY: all all-targets clean disk disk-all boot-disk boot-disk-all install-boot-disk test-hsioflip test-c64 c64 $(TARGETS)
 
 HOSTCC ?= cc
 FUJINET_NIO_LIB ?= ../fujinet-nio-lib
@@ -20,7 +20,15 @@ test-hsioflip:
 	    -I$(FUJINET_NIO_LIB)/include apps/platform/atari/hsioflip.c tests/hsioflip_test.c -o build/tests/hsioflip-test
 	build/tests/hsioflip-test
 
+# The C64 boot disk's image writer.
+test-c64:
+	python3 -m unittest discover -s boot-disk/scripts -p 'test_create_d64.py'
+
 msdos atari linux:
+	$(MAKE) -f makefiles/build.mk TARGET=$@
+
+# The utilities aren't built for the C64 yet (makefiles/build.mk).
+c64:
 	$(MAKE) -f makefiles/build.mk TARGET=$@
 
 # Amiga executables are always profile-qualified.  Supplying AMIGA_PROFILE
