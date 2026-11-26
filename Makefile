@@ -8,7 +8,7 @@ AMIGA_CRT_wb13 := nix13
 AMIGA_CRT_wb31 := clib2
 AMIGA_CRT_wb32 := clib2
 
-.PHONY: all all-targets clean disk disk-all boot-disk boot-disk-all install-boot-disk test-hsioflip test-c64 c64 $(TARGETS)
+.PHONY: all all-targets clean disk disk-all boot-disk boot-disk-all install-boot-disk test-hsioflip test-c64 test-wb13-node c64 $(TARGETS)
 
 HOSTCC ?= cc
 FUJINET_NIO_LIB ?= ../fujinet-nio-lib
@@ -24,6 +24,11 @@ test-hsioflip:
 test-c64:
 	python3 -m unittest discover -s boot-disk/scripts -p 'test_create_d64.py'
 	python3 -m unittest discover -s apps/platform/c64/fujidemo/tools -p 'test_*.py'
+
+test-wb13-node:
+	mkdir -p build/tests
+	$(HOSTCC) -std=c99 -Wall -Wextra -Werror -Iinclude/platform/amiga tests/wb13_node_test.c -o build/tests/wb13-node-test
+	build/tests/wb13-node-test
 
 msdos atari linux:
 	$(MAKE) -f makefiles/build.mk TARGET=$@

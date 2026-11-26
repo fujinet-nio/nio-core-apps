@@ -55,7 +55,7 @@ static void snapshot_node(int unit, node_snapshot_t *out) {
     struct FileSysStartupMsg *startup;
     struct DosEnvec *env;
     memset(out, 0, sizeof(*out));
-    sprintf(name, "DN%d", unit);
+    sprintf(name, "DN%ld", (long)unit);
     list = LockDosList(LDF_READ | LDF_DEVICES);
     if (!list)
         return;
@@ -149,7 +149,7 @@ static int update_inactive_envec(int unit, const fujinet_disk_media_profile_t *p
     struct DosList *list, *entry;
     struct FileSysStartupMsg *startup;
     struct DosEnvec *env;
-    sprintf(name, "DN%d", unit);
+    sprintf(name, "DN%ld", (long)unit);
     list = LockDosList(LDF_READ | LDF_DEVICES);
     if (!list)
         return 30;
@@ -180,7 +180,7 @@ static int create_node(int unit, const fujinet_disk_media_profile_t *profile, ui
     if (fujinet_disk_build_dos_envec(profile, dostype, &env) != FN_OK)
         return 30;
     printf("FMOUNT NODE before_make unit=%d\n", unit);
-    sprintf(names[unit], "DN%d", unit);
+    sprintf(names[unit], "DN%ld", (long)unit);
     packet[0] = (ULONG)names[unit];
     packet[1] = (ULONG)device;
     packet[2] = (ULONG)unit;
@@ -213,16 +213,19 @@ static void print_added_node(int unit) {
 }
 #endif
 
-#ifdef __KICK13__
+/* The Kickstart 1.3 path below is always built; the 2.0+ path above only
+ * against the 2.0 headers.  Such a build serves both ROMs (main). */
+#include "wb13_node.h"
 /*
- * Kickstart 1.3 has no public DOS-list locking or dynamic DosNode API.  Its
- * installer supplies eight static, initially inactive MountList entries.
+ * Kickstart 1.3 has no public DOS-list locking or dynamic DosNode API.  The
+ * OFS endpoints get their DOS entry built here (start_endpoint13); the FFS
+ * endpoints still come from the installer's static MountList through C:Mount.
  * Each endpoint owns a distinct fujinet-disk.device unit: DN0-1 (DD/FFS,
  * units 0-1), HN0-1 (HD/FFS, units 2-3), DO0-1 (DD/OFS, units 4-5), and
  * HO0-1 (HD/OFS, units 6-7).  This is deliberately explicit: WB1.3 cannot
  * safely exchange an active DOS handler for another filesystem or geometry.
  */
-static void usage(void) {
+static void usage13(void) {
     puts("Usage: FMOUNT slot 0|1|DN0:|DN1:|HN0:|HN1:|DO0:|DO1:|HO0:|HO1: [RO|RW]");
 }
 typedef struct wb13_endpoint {
@@ -287,6 +290,7 @@ static void endpoint_for_media(int index, fujinet_disk_media_profile_kind_t prof
         endpoint->label[0] = 'H'; endpoint->label[1] = 'O'; endpoint->unit = 6 + index;
     }
 }
+#ifdef __KICK13__
 static int is_ro(const char *s) {
     return s && (s[0] == 'R' || s[0] == 'r') &&
            (s[1] == 'O' || s[1] == 'o') && !s[2];
@@ -295,35 +299,114 @@ static int is_rw(const char *s) {
     return s && (s[0] == 'R' || s[0] == 'r') &&
            (s[1] == 'W' || s[1] == 'w') && !s[2];
 }
-static void record_started_endpoint(int unit, const char *label) {
-    char path[32];
-    BPTR file;
-    sprintf(path, "T:FNM%d", unit);
-    file = Open((CONST_STRPTR)path, MODE_NEWFILE);
-    if (file != 0) {
-        (void)Write(file, (APTR)label, (LONG)strlen(label));
-        Close(file);
-    }
+#endif
+#define WB13_BADDR(b) ((APTR)((ULONG)(b) << 2))
+#define WB13_MKBADDR(p) ((BPTR)((ULONG)(p) >> 2))
+
+static struct DosInfo *wb13_dos_info(void) {
+    return (struct DosInfo *)WB13_BADDR(DOSBase->dl_Root->rn_Info);
 }
-static int endpoint_was_started(int unit, const char *label) {
-    char path[32];
-    char recorded[5];
-    BPTR file;
-    LONG length;
-    sprintf(path, "T:FNM%d", unit);
-    file = Open((CONST_STRPTR)path, MODE_OLDFILE);
-    if (file == 0)
+/* True when a DOS device entry named label is already linked, whether it came
+ * from this command, an earlier Mount, or the user's own startup. */
+static int device_exists13(const char *label) {
+    struct DeviceNode *dn;
+    int found = 0;
+    Forbid();
+    for (dn = (struct DeviceNode *)WB13_BADDR(wb13_dos_info()->di_DevInfo); dn;
+         dn = (struct DeviceNode *)WB13_BADDR(dn->dn_Next)) {
+        if (dn->dn_Type == DLT_DEVICE && dn->dn_Name &&
+            wb13_bstr_matches((const uint8_t *)WB13_BADDR(dn->dn_Name), label)) {
+            found = 1;
+            break;
+        }
+    }
+    Permit();
+    return found;
+}
+/*
+ * Kickstart 1.3 has no MakeDosNode/AddDosNode, so build the entry Mount would
+ * build for an OFS MountList entry: the ROM filesystem's resident segment
+ * (rn_FileHandlerSegment), BCPL global vector 0, no task until first use.
+ * The memory is never freed: DOS owns the entry for the life of the system,
+ * as it does for a Mount-created one.
+ */
+static int create_ofs_node13(const wb13_endpoint_t *endpoint) {
+    static const char device[] = FUJINET_DISK_DEVICE_NAME;
+    struct DeviceNode *dn;
+    struct FileSysStartupMsg *fssm;
+    ULONG *env;
+    UBYTE *name, *devname;
+    struct DosInfo *info;
+    ULONG devlen = sizeof(device) - 1;
+
+    dn = AllocMem(sizeof(*dn), MEMF_PUBLIC | MEMF_CLEAR);
+    fssm = AllocMem(sizeof(*fssm), MEMF_PUBLIC | MEMF_CLEAR);
+    env = AllocMem(WB13_ENVEC_LONGS * sizeof(ULONG), MEMF_PUBLIC | MEMF_CLEAR);
+    name = AllocMem(WB13_NAME_MAX + 2, MEMF_PUBLIC | MEMF_CLEAR);
+    devname = AllocMem(devlen + 2, MEMF_PUBLIC | MEMF_CLEAR);
+    if (!dn || !fssm || !env || !name || !devname ||
+        wb13_make_bstr(name, endpoint->label) == 0) {
+        if (dn) FreeMem(dn, sizeof(*dn));
+        if (fssm) FreeMem(fssm, sizeof(*fssm));
+        if (env) FreeMem(env, WB13_ENVEC_LONGS * sizeof(ULONG));
+        if (name) FreeMem(name, WB13_NAME_MAX + 2);
+        if (devname) FreeMem(devname, devlen + 2);
         return 0;
-    length = Read(file, (APTR)recorded, 4);
-    Close(file);
-    return length == 4 && recorded[0] == label[0] && recorded[1] == label[1] &&
-           recorded[2] == label[2] && recorded[3] == ':';
+    }
+    /* BSTR with a trailing NUL, as fssm_Device documents. */
+    devname[0] = (UBYTE)devlen;
+    memcpy(devname + 1, device, devlen);
+    wb13_fill_envec((uint32_t *)env,
+                    endpoint->profile == FUJINET_DISK_MEDIA_PROFILE_HD_ADF,
+                    endpoint->dostype);
+    fssm->fssm_Unit = (ULONG)endpoint->unit;
+    fssm->fssm_Device = WB13_MKBADDR(devname);
+    fssm->fssm_Environ = WB13_MKBADDR(env);
+    fssm->fssm_Flags = 0;
+
+    dn->dn_Type = DLT_DEVICE;
+    dn->dn_StackSize = WB13_NODE_STACK;
+    dn->dn_Priority = WB13_NODE_PRIORITY;
+    dn->dn_Startup = WB13_MKBADDR(fssm);
+    dn->dn_GlobalVec = 0;
+    dn->dn_Name = WB13_MKBADDR(name);
+
+    Forbid();
+    info = wb13_dos_info();
+    dn->dn_SegList = DOSBase->dl_Root->rn_FileHandlerSegment;
+    dn->dn_Next = info->di_DevInfo;
+    info->di_DevInfo = WB13_MKBADDR(dn);
+    Permit();
+    return 1;
+}
+/* Start the DOS entry for endpoint without C:Mount where possible. */
+static int start_endpoint13(const wb13_endpoint_t *endpoint) {
+    char mount_command[20];
+    if (device_exists13(endpoint->label))
+        return 1;
+    if (endpoint->dostype == FUJINET_AMIGA_DOS_OFS)
+        return create_ofs_node13(endpoint);
+    /* FFS needs L:FastFileSystem loaded as the node's segment; until a free
+     * FFS exists, Mount (from the user's Workbench disk) does that. */
+    sprintf(mount_command, "C:Mount %s", endpoint->label);
+    return Execute((CONST_STRPTR)mount_command, 0, 0) && device_exists13(endpoint->label);
+}
+/* T: is RAM:T on a Workbench disk, but a bare (no Workbench) 1.3 boot has no
+ * T: assign; keep DOS from opening an "insert volume T" requester for it. */
+static BPTR open_quiet(const char *path, LONG mode) {
+    struct Process *self = (struct Process *)FindTask(NULL);
+    APTR old = self->pr_WindowPtr;
+    BPTR file;
+    self->pr_WindowPtr = (APTR)-1;
+    file = Open((CONST_STRPTR)path, mode);
+    self->pr_WindowPtr = old;
+    return file;
 }
 static int logical_unit_is_mounted(int index, char label[5]) {
     static const char *const paths[] = { "T:FNLA", "T:FNLB" };
     BPTR file;
     LONG length;
-    file = Open((CONST_STRPTR)paths[index], MODE_OLDFILE);
+    file = open_quiet(paths[index], MODE_OLDFILE);
     if (file == 0)
         return 0;
     length = Read(file, (APTR)label, 4);
@@ -336,18 +419,17 @@ static int logical_unit_is_mounted(int index, char label[5]) {
 static void record_logical_unit(int index, const char *label) {
     static const char *const paths[] = { "T:FNLA", "T:FNLB" };
     BPTR file;
-    file = Open((CONST_STRPTR)paths[index], MODE_NEWFILE);
+    file = open_quiet(paths[index], MODE_NEWFILE);
     if (file != 0) {
         (void)Write(file, (APTR)label, 4);
         Close(file);
     }
 }
-int main(int argc, char **argv) {
+static int main13(int argc, char **argv) {
     long slot_val = 0;
     uint8_t slot, readonly = 0;
     int unit = -1, logical_unit = -1, explicit_endpoint = 0, i;
     wb13_endpoint_t endpoint;
-    char mount_command[20];
     struct MsgPort *port;
     struct IOExtTD *request;
     struct fujinet_disk_catalog_mount catalog;
@@ -357,7 +439,7 @@ int main(int argc, char **argv) {
     LONG result;
 
     if (argc < 2 || argc > 4 || argv[1][0] == '?') {
-        usage();
+        usage13();
         return 10;
     }
     for (i = 0; argv[1][i] >= '0' && argv[1][i] <= '9'; ++i)
@@ -370,14 +452,14 @@ int main(int argc, char **argv) {
     for (i = 2; i < argc; ++i) {
         if (parse_endpoint(argv[i], &endpoint)) {
             if (explicit_endpoint || logical_unit >= 0) {
-                usage();
+                usage13();
                 return 10;
             }
             unit = endpoint.unit;
             explicit_endpoint = 1;
         } else if (parse_logical_unit(argv[i]) >= 0) {
             if (explicit_endpoint || logical_unit >= 0) {
-                usage();
+                usage13();
                 return 10;
             }
             logical_unit = parse_logical_unit(argv[i]);
@@ -386,7 +468,7 @@ int main(int argc, char **argv) {
         else if (is_rw(argv[i]))
             readonly = 0;
         else {
-            usage();
+            usage13();
             return 10;
         }
     }
@@ -469,13 +551,9 @@ int main(int argc, char **argv) {
     CloseDevice((struct IORequest *)request);
     DeleteExtIO((struct IORequest *)request);
     DeletePort(port);
-    if (!endpoint_was_started(unit, endpoint.label)) {
-        sprintf(mount_command, "C:Mount %s", endpoint.label);
-        if (!Execute((CONST_STRPTR)mount_command, 0, 0)) {
-            fprintf(stderr, "Cannot start %s\n", endpoint.label);
-            return 10;
-        }
-        record_started_endpoint(unit, endpoint.label);
+    if (!start_endpoint13(&endpoint)) {
+        fprintf(stderr, "Cannot start %s\n", endpoint.label);
+        return 10;
     }
     if (logical_unit >= 0)
         record_logical_unit(logical_unit, endpoint.label);
@@ -484,8 +562,8 @@ int main(int argc, char **argv) {
            dostype == FUJINET_AMIGA_DOS_FFS ? "FFS" : "OFS");
     return 0;
 }
-#else
-int main(int argc, char **argv) {
+#ifndef __KICK13__
+static int main20(int argc, char **argv) {
     long slot_val = 0;
     uint8_t slot, readonly = 0;
     int unit, i;
@@ -556,7 +634,7 @@ int main(int argc, char **argv) {
                      (node.bpt == profile.blocks_per_track && node.surfaces == profile.surfaces &&
                       node.low == profile.low_cylinder && node.high == profile.high_cylinder &&
                       node.dostype == dostype);
-        sprintf(dos_name, "DN%d:", unit);
+        sprintf(dos_name, "DN%ld:", (long)unit);
         if (node_parked(&node, request)) {
             if (!compatible) {
                 refuse_media_change(unit, &node);
@@ -627,3 +705,13 @@ fail:
     return 10;
 }
 #endif
+
+int main(int argc, char **argv) {
+#ifdef __KICK13__
+    return main13(argc, argv);
+#else
+    if (((struct Library *)DOSBase)->lib_Version < 36)
+        return main13(argc, argv);
+    return main20(argc, argv);
+#endif
+}

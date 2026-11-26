@@ -41,3 +41,4 @@ jobs:
         run: |
           make test-hsioflip
           make test-c64
+          make test-wb13-node
